@@ -4,10 +4,9 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2, ArrowUp, ArrowDown, ClipboardList, Search, ChevronDown, X } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 
 interface WishlistItem {
-    id: number;
+    id: string;
     itemId: string;
     itemName: string;
     quantity: number;
@@ -21,8 +20,36 @@ interface Item {
 }
 
 interface WishlistClientProps {
-    wishlistItems: WishlistItem[];
     items: Item[];
+}
+
+const WISHLIST_COOKIE_NAME = 'wishlist_items';
+
+// Cookie utilities
+function getCookie(name: string): string | null {
+    if (typeof document === 'undefined') return null;
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? decodeURIComponent(match[2]) : null;
+}
+
+function setCookie(name: string, value: string, days: number = 365) {
+    if (typeof document === 'undefined') return;
+    const expires = new Date(Date.now() + days * 864e5).toUTCString();
+    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+function getWishlistItems(): WishlistItem[] {
+    const cookie = getCookie(WISHLIST_COOKIE_NAME);
+    if (!cookie) return [];
+    try {
+        return JSON.parse(cookie);
+    } catch {
+        return [];
+    }
+}
+
+function saveWishlistItems(items: WishlistItem[]) {
+    setCookie(WISHLIST_COOKIE_NAME, JSON.stringify(items));
 }
 
 // Searchable Select Component
@@ -41,9 +68,7 @@ function SearchableSelect({
     const [search, setSearch] = useState('');
     const ref = useRef<HTMLDivElement>(null);
 
-    // Ensure items is always an array
     const safeItems = items || [];
-
     const selectedItem = safeItems.find(i => i.id === value);
 
     const filteredItems = useMemo(() => {
@@ -135,72 +160,86 @@ function SearchableSelect({
     );
 }
 
-const BASE_PATH = '/arc-raiders-tool';
-
-// Server actions called via fetch
-async function addToWishlist(itemId: string, itemName: string, quantity: number) {
-    const formData = new FormData();
-    formData.set('itemId', itemId);
-    formData.set('itemName', itemName);
-    formData.set('quantity', String(quantity));
-
-    await fetch(`${BASE_PATH}/api/wishlist/add`, {
-        method: 'POST',
-        body: formData,
-    });
-}
-
-async function removeFromWishlist(id: number) {
-    await fetch(`${BASE_PATH}/api/wishlist/remove`, {
-        method: 'POST',
-        body: JSON.stringify({ id }),
-        headers: { 'Content-Type': 'application/json' },
-    });
-}
-
-async function updatePriority(id: number, priority: number) {
-    await fetch(`${BASE_PATH}/api/wishlist/priority`, {
-        method: 'POST',
-        body: JSON.stringify({ id, priority }),
-        headers: { 'Content-Type': 'application/json' },
-    });
-}
-
-export function WishlistClient({ wishlistItems, items }: WishlistClientProps) {
-    const router = useRouter();
+export function WishlistClient({ items }: WishlistClientProps) {
+    const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
     const [selectedItemId, setSelectedItemId] = useState('');
     const [selectedItemName, setSelectedItemName] = useState('');
     const [quantity, setQuantity] = useState(1);
-    const [loading, setLoading] = useState(false);
+    const [mounted, setMounted] = useState(false);
 
-    const handleAdd = async () => {
+    // Load from cookies on mount
+    useEffect(() => {
+        setWishlistItems(getWishlistItems());
+        setMounted(true);
+    }, []);
+
+    // Sort by priority (descending)
+    const sortedWishlistItems = useMemo(() => {
+        return [...wishlistItems].sort((a, b) => b.priority - a.priority);
+    }, [wishlistItems]);
+
+    const handleAdd = () => {
         if (!selectedItemId) return;
-        setLoading(true);
-        try {
-            await addToWishlist(selectedItemId, selectedItemName, quantity);
-            setSelectedItemId('');
-            setSelectedItemName('');
-            setQuantity(1);
-            router.refresh();
-        } finally {
-            setLoading(false);
+
+        // Check if already exists
+        if (wishlistItems.some(item => item.itemId === selectedItemId)) {
+            return; // Already in wishlist
         }
+
+        const newItem: WishlistItem = {
+            id: Date.now().toString(),
+            itemId: selectedItemId,
+            itemName: selectedItemName,
+            quantity,
+            priority: 0,
+        };
+
+        const updated = [...wishlistItems, newItem];
+        setWishlistItems(updated);
+        saveWishlistItems(updated);
+
+        setSelectedItemId('');
+        setSelectedItemName('');
+        setQuantity(1);
     };
 
-    const handleRemove = async (id: number) => {
-        await removeFromWishlist(id);
-        router.refresh();
+    const handleRemove = (id: string) => {
+        const updated = wishlistItems.filter(item => item.id !== id);
+        setWishlistItems(updated);
+        saveWishlistItems(updated);
     };
 
-    const handlePriorityUp = async (item: WishlistItem) => {
-        await updatePriority(item.id, item.priority + 1);
-        router.refresh();
+    const handlePriorityUp = (id: string) => {
+        const updated = wishlistItems.map(item =>
+            item.id === id ? { ...item, priority: item.priority + 1 } : item
+        );
+        setWishlistItems(updated);
+        saveWishlistItems(updated);
     };
 
-    const handlePriorityDown = async (item: WishlistItem) => {
-        await updatePriority(item.id, Math.max(0, item.priority - 1));
-        router.refresh();
+    const handlePriorityDown = (id: string) => {
+        const updated = wishlistItems.map(item =>
+            item.id === id ? { ...item, priority: Math.max(0, item.priority - 1) } : item
+        );
+        setWishlistItems(updated);
+        saveWishlistItems(updated);
     };
+
+    const handleQuantityChange = (id: string, delta: number) => {
+        const updated = wishlistItems.map(item =>
+            item.id === id ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item
+        );
+        setWishlistItems(updated);
+        saveWishlistItems(updated);
+    };
+
+    if (!mounted) {
+        return (
+            <div className="text-center py-12 text-gray-500">
+                読み込み中...
+            </div>
+        );
+    }
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -242,11 +281,11 @@ export function WishlistClient({ wishlistItems, items }: WishlistClientProps) {
                         </div>
                         <Button
                             onClick={handleAdd}
-                            disabled={!selectedItemId || loading}
+                            disabled={!selectedItemId}
                             variant="tactical"
                             className="w-full"
                         >
-                            {loading ? '追加中...' : 'ウィッシュリストに追加'}
+                            ウィッシュリストに追加
                         </Button>
                     </div>
                 </CardContent>
@@ -260,11 +299,14 @@ export function WishlistClient({ wishlistItems, items }: WishlistClientProps) {
                             <ClipboardList className="h-5 w-5" />
                             登録アイテム ({wishlistItems.length})
                         </CardTitle>
+                        <p className="text-sm text-gray-500">
+                            データはブラウザに保存されます
+                        </p>
                     </CardHeader>
                     <CardContent>
-                        {wishlistItems.length > 0 ? (
+                        {sortedWishlistItems.length > 0 ? (
                             <div className="space-y-2">
-                                {wishlistItems.map((item) => (
+                                {sortedWishlistItems.map((item) => (
                                     <div
                                         key={item.id}
                                         className="flex items-center justify-between p-3 bg-white border-2 border-gray-200 rounded-lg"
@@ -273,25 +315,39 @@ export function WishlistClient({ wishlistItems, items }: WishlistClientProps) {
                                             <span className="font-medium text-gray-900">
                                                 {item.itemName || item.itemId}
                                             </span>
-                                            <span className="ml-2 text-sm text-gray-500">
-                                                x{item.quantity}
-                                            </span>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <button
+                                                    onClick={() => handleQuantityChange(item.id, -1)}
+                                                    className="w-6 h-6 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded text-gray-600"
+                                                >
+                                                    -
+                                                </button>
+                                                <span className="text-sm text-gray-500">
+                                                    x{item.quantity}
+                                                </span>
+                                                <button
+                                                    onClick={() => handleQuantityChange(item.id, 1)}
+                                                    className="w-6 h-6 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded text-gray-600"
+                                                >
+                                                    +
+                                                </button>
+                                            </div>
                                             {item.priority > 0 && (
-                                                <span className="ml-2 text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded">
+                                                <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded mt-1 inline-block">
                                                     優先度 {item.priority}
                                                 </span>
                                             )}
                                         </div>
                                         <div className="flex items-center gap-1">
                                             <button
-                                                onClick={() => handlePriorityUp(item)}
+                                                onClick={() => handlePriorityUp(item.id)}
                                                 className="p-1.5 hover:bg-gray-100 rounded"
                                                 title="優先度を上げる"
                                             >
                                                 <ArrowUp className="h-4 w-4 text-gray-500" />
                                             </button>
                                             <button
-                                                onClick={() => handlePriorityDown(item)}
+                                                onClick={() => handlePriorityDown(item.id)}
                                                 className="p-1.5 hover:bg-gray-100 rounded"
                                                 title="優先度を下げる"
                                             >
