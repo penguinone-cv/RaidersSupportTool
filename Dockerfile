@@ -30,10 +30,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV DATABASE_URL="file:/app/data/dev.db"
 
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
 # Install prisma CLI for db push (use same version as in package.json)
 RUN npm install -g prisma@6.1.0
 
@@ -44,8 +40,12 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
-# Create data directory for SQLite
-RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Create data directory for SQLite with correct ownership
+RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data && chown -R nextjs:nodejs /app
 
 USER nextjs
 
