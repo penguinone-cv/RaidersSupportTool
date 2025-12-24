@@ -135,6 +135,8 @@ function SearchableSelect({
     );
 }
 
+const BASE_PATH = '/arc-raiders-tool';
+
 // Server actions called via fetch
 async function addToWishlist(itemId: string, itemName: string, quantity: number) {
     const formData = new FormData();
@@ -142,14 +144,14 @@ async function addToWishlist(itemId: string, itemName: string, quantity: number)
     formData.set('itemName', itemName);
     formData.set('quantity', String(quantity));
 
-    await fetch('/api/wishlist/add', {
+    await fetch(`${BASE_PATH}/api/wishlist/add`, {
         method: 'POST',
         body: formData,
     });
 }
 
 async function removeFromWishlist(id: number) {
-    await fetch('/api/wishlist/remove', {
+    await fetch(`${BASE_PATH}/api/wishlist/remove`, {
         method: 'POST',
         body: JSON.stringify({ id }),
         headers: { 'Content-Type': 'application/json' },
@@ -157,7 +159,7 @@ async function removeFromWishlist(id: number) {
 }
 
 async function updatePriority(id: number, priority: number) {
-    await fetch('/api/wishlist/priority', {
+    await fetch(`${BASE_PATH}/api/wishlist/priority`, {
         method: 'POST',
         body: JSON.stringify({ id, priority }),
         headers: { 'Content-Type': 'application/json' },

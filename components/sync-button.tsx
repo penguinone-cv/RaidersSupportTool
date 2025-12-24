@@ -15,7 +15,8 @@ export function SyncButton() {
         setMessage(null);
 
         try {
-            const response = await fetch('/api/sync/items', {
+            const basePath = '/arc-raiders-tool';
+            const response = await fetch(`${basePath}/api/sync/items`, {
                 method: 'POST',
             });
             const data = await response.json();

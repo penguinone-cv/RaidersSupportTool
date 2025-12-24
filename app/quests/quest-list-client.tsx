@@ -154,9 +154,10 @@ export function QuestListClient({ quests }: QuestListClientProps) {
     const saveTranslation = async () => {
         if (!editingQuestId) return;
 
+        const basePath = '/arc-raiders-tool';
         setSaving(true);
         try {
-            await fetch('/api/quests/translate', {
+            await fetch(`${basePath}/api/quests/translate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
