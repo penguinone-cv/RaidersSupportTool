@@ -1,0 +1,134 @@
+// This is your Prisma schema file
+// https://pris.ly/d/prisma-schema
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Party {
+  id        String   @id @default(cuid())
+  name      String   @default("New Party")
+  members   Member[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Member {
+  id            String  @id @default(uuid())
+  partyId       String
+  party         Party   @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  name          String
+  inventoryData String? // JSON string for flexible inventory storage
+
+  @@index([partyId])
+}
+
+model Item {
+  id          String   @id
+  nameEn      String
+  nameJp      String?
+  category    String?
+  rarity      String?
+  imageUrl    String?
+  description String?
+  lastFetched DateTime @default(now())
+
+  recipes     Recipe[]           @relation("OutputItem")
+  ingredients RecipeIngredient[]
+}
+
+model Recipe {
+  id           Int                @id @default(autoincrement())
+  outputItemId String             @unique
+  outputItem   Item               @relation("OutputItem", fields: [outputItemId], references: [id], onDelete: Cascade)
+  station      String
+  ingredients  RecipeIngredient[]
+}
+
+model RecipeIngredient {
+  id       Int    @id @default(autoincrement())
+  recipeId Int
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  itemId   String
+  item     Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  count    Int
+}
+
+model TranslationLog {
+  id        Int      @id @default(autoincrement())
+  itemId    String
+  oldName   String?
+  newName   String
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
+
+model SyncMetadata {
+  id            String   @id @default("singleton")
+  lastSyncedAt  DateTime @default(now())
+  itemCount     Int      @default(0)
+  recipeCount   Int      @default(0)
+  questCount    Int      @default(0)
+}
+
+// クエスト
+model Quest {
+  id           String   @id
+  nameEn       String
+  nameJp       String?
+  objectives   String   // JSON array
+  imageUrl     String?
+  isCompleted  Boolean  @default(false)
+  requirements QuestRequirement[]
+  rewards      QuestReward[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// クエスト納品アイテム
+model QuestRequirement {
+  id             Int      @id @default(autoincrement())
+  questId        String
+  quest          Quest    @relation(fields: [questId], references: [id], onDelete: Cascade)
+  itemId         String
+  requiredCount  Int
+  deliveredCount Int      @default(0)
+
+  @@index([questId])
+}
+
+// クエスト報酬
+model QuestReward {
+  id       Int    @id @default(autoincrement())
+  questId  String
+  quest    Quest  @relation(fields: [questId], references: [id], onDelete: Cascade)
+  itemId   String
+  itemName String
+  quantity Int
+
+  @@index([questId])
+}
+
+// ウィッシュリスト
+model WishlistItem {
+  id        Int      @id @default(autoincrement())
+  itemId    String
+  itemName  String
+  quantity  Int      @default(1)
+  priority  Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+// ワークショップ施設
+model Workshop {
+  id           String @id @default(cuid())
+  name         String @unique
+  maxLevel     Int    @default(3)
+  currentLevel Int    @default(0)
+  displayOrder Int    @default(0)
+}

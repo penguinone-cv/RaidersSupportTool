@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light theme */
+    --background: 0 0% 98%;
+    --foreground: 160 30% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 160 30% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 160 30% 10%;
+
+    --primary: 142 71% 35%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 160 15% 92%;
+    --secondary-foreground: 160 30% 10%;
+
+    --muted: 160 10% 90%;
+    --muted-foreground: 160 10% 40%;
+
+    --accent: 160 15% 92%;
+    --accent-foreground: 160 30% 10%;
+
+    --destructive: 0 84% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 160 20% 80%;
+    --input: 160 20% 85%;
+    --ring: 142 71% 35%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 160 30% 3%;
+    --foreground: 150 10% 90%;
+
+    --card: 160 25% 6%;
+    --card-foreground: 150 10% 90%;
+
+    --popover: 160 25% 6%;
+    --popover-foreground: 150 10% 90%;
+
+    --primary: 142 71% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 160 20% 12%;
+    --secondary-foreground: 150 10% 90%;
+
+    --muted: 160 15% 15%;
+    --muted-foreground: 160 10% 55%;
+
+    --accent: 160 20% 15%;
+    --accent-foreground: 150 10% 90%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 160 20% 15%;
+    --input: 160 20% 15%;
+    --ring: 142 71% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary));
+}
+
+/* Selection color */
+::selection {
+  background: hsla(142, 71%, 45%, 0.3);
+}
