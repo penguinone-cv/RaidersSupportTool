@@ -6,7 +6,7 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json* ./
 
-# Install dependencies (no postinstall now)
+# Install dependencies
 RUN npm ci
 
 # Copy prisma schema and generate client
@@ -15,6 +15,9 @@ RUN npx prisma generate
 
 # Copy source files
 COPY . .
+
+# Create public folder if it doesn't exist
+RUN mkdir -p public
 
 # Build the application
 RUN npm run build
