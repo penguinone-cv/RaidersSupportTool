@@ -51,4 +51,4 @@ EXPOSE 3939
 ENV PORT=3939
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["sh", "-c", "npx prisma db push && node server.js"]
