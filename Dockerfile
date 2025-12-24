@@ -34,6 +34,9 @@ ENV DATABASE_URL="file:/app/data/dev.db"
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# Install prisma CLI for db push (use same version as in package.json)
+RUN npm install -g prisma@6.1.0
+
 # Copy necessary files from builder
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
@@ -51,4 +54,4 @@ EXPOSE 3939
 ENV PORT=3939
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["sh", "-c", "npx prisma db push && node server.js"]
+CMD ["sh", "-c", "prisma db push --skip-generate && node server.js"]
