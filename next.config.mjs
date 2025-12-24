@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  basePath: '/arc-raiders-tool',
   output: 'standalone',
   images: {
     remotePatterns: [
