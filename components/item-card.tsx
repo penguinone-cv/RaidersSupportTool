@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { cn, getRarityColor, getRarityBgColor } from '@/lib/utils';
+import { cn, getRarityBorderStyle, getRarityBgStyle, getRarityTextStyle, getRarityJp, getCategoryJp } from '@/lib/utils';
 import { Card, CardContent } from './ui/card';
 
 interface ItemCardProps {
@@ -23,17 +23,20 @@ export function ItemCard({
     imageUrl,
     onClick,
 }: ItemCardProps) {
-    const rarityColor = getRarityColor(rarity);
-    const rarityBg = getRarityBgColor(rarity);
+    const borderStyle = getRarityBorderStyle(rarity);
+    const bgStyle = getRarityBgStyle(rarity);
+    const textStyle = getRarityTextStyle(rarity);
+    const rarityJp = getRarityJp(rarity);
+    const categoryJp = getCategoryJp(category);
 
     return (
         <Card
             className={cn(
                 'cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg',
-                'border-l-4 border-2 border-gray-300',
-                rarityColor,
+                'border-l-4 border-2 border-gray-200',
                 'overflow-hidden bg-white'
             )}
+            style={borderStyle}
             onClick={onClick}
         >
             <CardContent className="p-0">
@@ -42,9 +45,9 @@ export function ItemCard({
                     <div
                         className={cn(
                             'relative h-16 w-16 flex-shrink-0 rounded-md overflow-hidden',
-                            'border-2 border-gray-300',
-                            rarityBg
+                            'border-2 border-gray-200'
                         )}
+                        style={bgStyle}
                     >
                         {imageUrl ? (
                             <Image
@@ -84,17 +87,14 @@ export function ItemCard({
                         <div className="mt-2 flex items-center gap-2">
                             {rarity && (
                                 <span
-                                    className={cn(
-                                        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                                        rarityBg,
-                                        rarityColor
-                                    )}
+                                    className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                                    style={textStyle}
                                 >
-                                    {rarity}
+                                    {rarityJp}
                                 </span>
                             )}
                             {category && (
-                                <span className="text-xs text-gray-500">{category}</span>
+                                <span className="text-xs text-gray-500">{categoryJp}</span>
                             )}
                         </div>
                     </div>

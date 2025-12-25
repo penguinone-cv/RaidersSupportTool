@@ -132,3 +132,16 @@ model Workshop {
   currentLevel Int    @default(0)
   displayOrder Int    @default(0)
 }
+
+// 翻訳辞書（レアリティ、カテゴリなどの翻訳）
+model Translation {
+  id        Int      @id @default(autoincrement())
+  type      String   // 'rarity' or 'category'
+  keyEn     String   // English key (lowercase)
+  valueJp   String   // Japanese translation
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, keyEn])
+  @@index([type])
+}

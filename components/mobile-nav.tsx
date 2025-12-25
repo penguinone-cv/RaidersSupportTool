@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X, Package, Wrench, Search, Target, ClipboardList, LayoutDashboard, Users } from 'lucide-react';
+import { Menu, X, Package, Wrench, Search, Target, ClipboardList, LayoutDashboard, Users, Settings } from 'lucide-react';
 
 const navItems = [
     { href: '/', label: 'アイテム', icon: Package },
@@ -13,6 +13,7 @@ const navItems = [
     { href: '/wishlist', label: 'ウィッシュリスト', icon: ClipboardList },
     { href: '/dashboard', label: 'ダッシュボード', icon: LayoutDashboard },
     { href: '/party', label: 'パーティー', icon: Users },
+    { href: '/settings', label: '設定', icon: Settings },
 ];
 
 export function MobileNav() {
@@ -63,8 +64,8 @@ export function MobileNav() {
                             key={item.href}
                             href={item.href}
                             className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${isActive
-                                    ? 'text-green-700 bg-green-50'
-                                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                ? 'text-green-700 bg-green-50'
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                                 }`}
                         >
                             {item.label}
@@ -85,8 +86,8 @@ export function MobileNav() {
                                 key={item.href}
                                 href={item.href}
                                 className={`flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${isActive
-                                        ? 'text-green-700 bg-green-50'
-                                        : 'text-gray-700 hover:bg-gray-50'
+                                    ? 'text-green-700 bg-green-50'
+                                    : 'text-gray-700 hover:bg-gray-50'
                                     }`}
                             >
                                 <Icon className={`h-5 w-5 ${isActive ? 'text-green-600' : 'text-gray-400'}`} />

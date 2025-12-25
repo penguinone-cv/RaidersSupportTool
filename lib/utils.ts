@@ -13,45 +13,54 @@ export function formatNumber(n: number): string {
 }
 
 /**
- * Get rarity color class
+ * Rarity color definitions
+ * Legendary #FFC600, Epic #CC3099, Rare #00A8F2, Uncommon #26BF57, Common #6C6C6C
  */
-export function getRarityColor(rarity: string | null): string {
+const RARITY_COLORS: Record<string, string> = {
+    legendary: '#FFC600',
+    epic: '#CC3099',
+    rare: '#00A8F2',
+    uncommon: '#26BF57',
+    common: '#6C6C6C',
+};
+
+/**
+ * Get rarity border color (for inline style)
+ */
+export function getRarityBorderStyle(rarity: string | null): React.CSSProperties {
     const rarityLower = (rarity || '').toLowerCase();
-    switch (rarityLower) {
-        case 'common':
-            return 'text-gray-400 border-gray-500';
-        case 'uncommon':
-            return 'text-green-400 border-green-500';
-        case 'rare':
-            return 'text-blue-400 border-blue-500';
-        case 'epic':
-            return 'text-purple-400 border-purple-500';
-        case 'legendary':
-            return 'text-amber-400 border-amber-500';
-        default:
-            return 'text-gray-400 border-gray-600';
-    }
+    const color = RARITY_COLORS[rarityLower] || '#9CA3AF';
+    return { borderLeftColor: color };
 }
 
 /**
- * Get rarity background class
+ * Get rarity background style (for inline style)
  */
-export function getRarityBgColor(rarity: string | null): string {
+export function getRarityBgStyle(rarity: string | null): React.CSSProperties {
     const rarityLower = (rarity || '').toLowerCase();
-    switch (rarityLower) {
-        case 'common':
-            return 'bg-gray-500/20';
-        case 'uncommon':
-            return 'bg-green-500/20';
-        case 'rare':
-            return 'bg-blue-500/20';
-        case 'epic':
-            return 'bg-purple-500/20';
-        case 'legendary':
-            return 'bg-amber-500/20';
-        default:
-            return 'bg-gray-500/20';
-    }
+    const color = RARITY_COLORS[rarityLower] || '#9CA3AF';
+    return { backgroundColor: `${color}20` }; // 20 = ~12% opacity in hex
+}
+
+/**
+ * Get rarity text color (inline style)
+ */
+export function getRarityTextStyle(rarity: string | null): React.CSSProperties {
+    const rarityLower = (rarity || '').toLowerCase();
+    const color = RARITY_COLORS[rarityLower] || '#9CA3AF';
+    return {
+        color: color,
+        backgroundColor: `${color}25` // ~15% opacity
+    };
+}
+
+// Keep old functions for backward compatibility (returns empty string now)
+export function getRarityColor(_rarity: string | null): string {
+    return '';
+}
+
+export function getRarityBgColor(_rarity: string | null): string {
+    return '';
 }
 
 /**
@@ -74,4 +83,86 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
         if (timeout) clearTimeout(timeout);
         timeout = setTimeout(() => func(...args), wait);
     };
+}
+
+/**
+ * Rarity Japanese translations
+ */
+const RARITY_JP: Record<string, string> = {
+    legendary: 'レジェンダリー',
+    epic: 'エピック',
+    rare: 'レア',
+    uncommon: 'アンコモン',
+    common: 'コモン',
+};
+
+/**
+ * Get Japanese rarity name
+ */
+export function getRarityJp(rarity: string | null): string {
+    const rarityLower = (rarity || '').toLowerCase();
+    return RARITY_JP[rarityLower] || rarity || '';
+}
+
+/**
+ * Category Japanese translations
+ */
+const CATEGORY_JP: Record<string, string> = {
+    // Weapons
+    'assault rifle': 'アサルトライフル',
+    'submachine gun': 'サブマシンガン',
+    'sniper rifle': 'スナイパーライフル',
+    'shotgun': 'ショットガン',
+    'pistol': 'ピストル',
+    'light machine gun': 'ライトマシンガン',
+    'lmg': 'ライトマシンガン',
+    'smg': 'サブマシンガン',
+    'rifle': 'ライフル',
+    'weapons': '武器',
+    'weapon': '武器',
+    // Equipment
+    'equipment': '装備',
+    'armor': 'アーマー',
+    'helmet': 'ヘルメット',
+    'vest': 'ベスト',
+    'backpack': 'バックパック',
+    'bag': 'バッグ',
+    // Resources
+    'resource': '素材',
+    'resources': '素材',
+    'material': '素材',
+    'materials': '素材',
+    'component': 'コンポーネント',
+    'components': 'コンポーネント',
+    // Consumables
+    'consumable': '消耗品',
+    'consumables': '消耗品',
+    'medicine': '医薬品',
+    'food': '食料',
+    'drink': '飲料',
+    // Others
+    'blueprint': '設計図',
+    'blueprints': '設計図',
+    'attachment': 'アタッチメント',
+    'attachments': 'アタッチメント',
+    'mod': 'MOD',
+    'mods': 'MOD',
+    'ammo': '弾薬',
+    'ammunition': '弾薬',
+    'tool': 'ツール',
+    'tools': 'ツール',
+    'key': '鍵',
+    'keys': '鍵',
+    'quest item': 'クエストアイテム',
+    'misc': 'その他',
+    'miscellaneous': 'その他',
+    'other': 'その他',
+};
+
+/**
+ * Get Japanese category name
+ */
+export function getCategoryJp(category: string | null): string {
+    const categoryLower = (category || '').toLowerCase();
+    return CATEGORY_JP[categoryLower] || category || '';
 }
