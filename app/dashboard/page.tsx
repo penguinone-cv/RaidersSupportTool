@@ -1,117 +1,307 @@
-import { prisma } from '@/lib/prisma';
+'use client';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Package, ClipboardList, Target, AlertTriangle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Package, ClipboardList, Target, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, X } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
+const WISHLIST_COOKIE_NAME = 'wishlist_items';
+const BASE_PATH = '/arc-raiders-tool';
 
-// Calculate all required materials from wishlist items
-async function calculateWishlistMaterials() {
-    const wishlistItems = await prisma.wishlistItem.findMany();
-    const materials = new Map<string, { name: string; count: number }>();
+interface WishlistItem {
+    id: string;
+    itemId: string;
+    itemName: string;
+    quantity: number;
+    priority: number;
+}
 
-    for (const wishItem of wishlistItems) {
-        const recipe = await prisma.recipe.findUnique({
-            where: { outputItemId: wishItem.itemId },
-            include: {
-                ingredients: {
-                    include: { item: true },
-                },
-            },
-        });
+interface MaterialUsage {
+    sourceName: string;
+    sourceType: 'wishlist' | 'quest';
+    sourceId: string; // itemId for wishlist, questId for quest
+    count: number;
+}
 
+interface MaterialData {
+    id: string;
+    name: string;
+    wishlistCount: number;
+    questCount: number;
+    usages: MaterialUsage[];
+}
+
+interface PopupData {
+    type: 'wishlist' | 'quest';
+    name: string;
+    ingredients: { itemName: string; count: number }[];
+}
+
+// Cookie utilities
+function getCookie(name: string): string | null {
+    if (typeof document === 'undefined') return null;
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? decodeURIComponent(match[2]) : null;
+}
+
+function getWishlistItems(): WishlistItem[] {
+    const cookie = getCookie(WISHLIST_COOKIE_NAME);
+    if (!cookie) return [];
+    try {
+        return JSON.parse(cookie);
+    } catch {
+        return [];
+    }
+}
+
+export default function DashboardPage() {
+    const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+    const [recipes, setRecipes] = useState<Record<string, { ingredients: { itemId: string; itemName: string; count: number }[] }>>({});
+    const [questMaterialsData, setQuestMaterialsData] = useState<{ materials: Record<string, { name: string; count: number; questName: string; questId: string }[]> }>({ materials: {} });
+    const [questDetails, setQuestDetails] = useState<Record<string, { requirements: { itemName: string; count: number }[] }>>({});
+    const [loading, setLoading] = useState(true);
+    const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+    const [popup, setPopup] = useState<PopupData | null>(null);
+
+    // Load data on mount
+    useEffect(() => {
+        const loadData = async () => {
+            // Load wishlist from cookies
+            const items = getWishlistItems();
+            setWishlistItems(items);
+
+            // Fetch recipes for wishlist items
+            const recipeMap: Record<string, { ingredients: { itemId: string; itemName: string; count: number }[] }> = {};
+            for (const item of items) {
+                try {
+                    const res = await fetch(`${BASE_PATH}/api/recipes/${item.itemId}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.recipe) {
+                            recipeMap[item.itemId] = data.recipe;
+                        }
+                    }
+                } catch (e) {
+                    // Recipe not found, skip
+                }
+            }
+            setRecipes(recipeMap);
+
+            // Fetch quest materials with details
+            try {
+                const res = await fetch(`${BASE_PATH}/api/dashboard/quest-materials`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setQuestMaterialsData(data);
+
+                    // Store quest details for popup
+                    if (data.questDetails) {
+                        setQuestDetails(data.questDetails);
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to fetch quest materials:', e);
+            }
+
+            setLoading(false);
+        };
+
+        loadData();
+    }, []);
+
+    // Show popup for wishlist item
+    const showWishlistPopup = (itemId: string, itemName: string) => {
+        const recipe = recipes[itemId];
         if (recipe) {
-            for (const ingredient of recipe.ingredients) {
-                const existing = materials.get(ingredient.itemId);
-                const count = ingredient.count * wishItem.quantity;
-                if (existing) {
-                    existing.count += count;
-                } else {
-                    materials.set(ingredient.itemId, {
-                        name: ingredient.item.nameJp || ingredient.item.nameEn,
+            setPopup({
+                type: 'wishlist',
+                name: itemName,
+                ingredients: recipe.ingredients.map(ing => ({
+                    itemName: ing.itemName,
+                    count: ing.count,
+                })),
+            });
+        }
+    };
+
+    // Show popup for quest
+    const showQuestPopup = async (questId: string, questName: string) => {
+        // Check if we already have quest details
+        if (questDetails[questId]) {
+            setPopup({
+                type: 'quest',
+                name: questName,
+                ingredients: questDetails[questId].requirements,
+            });
+        } else {
+            // Fetch quest requirements
+            try {
+                const res = await fetch(`${BASE_PATH}/api/quests/${questId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.requirements) {
+                        setPopup({
+                            type: 'quest',
+                            name: questName,
+                            ingredients: data.requirements.map((r: { itemName: string; count: number }) => ({
+                                itemName: r.itemName,
+                                count: r.count,
+                            })),
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to fetch quest details:', e);
+            }
+        }
+    };
+
+    // Calculate materials with usage details
+    const { wishlistMaterials, totalMaterials } = useMemo(() => {
+        const wishlistMats = new Map<string, { name: string; count: number; usages: MaterialUsage[] }>();
+        const questMats = new Map<string, { name: string; count: number; usages: MaterialUsage[] }>();
+
+        // Process wishlist items
+        for (const wishItem of wishlistItems) {
+            const recipe = recipes[wishItem.itemId];
+            if (recipe) {
+                for (const ingredient of recipe.ingredients) {
+                    const count = ingredient.count * wishItem.quantity;
+                    const existing = wishlistMats.get(ingredient.itemId);
+                    const usage: MaterialUsage = {
+                        sourceName: wishItem.itemName,
+                        sourceType: 'wishlist',
+                        sourceId: wishItem.itemId,
                         count,
-                    });
+                    };
+                    if (existing) {
+                        existing.count += count;
+                        existing.usages.push(usage);
+                    } else {
+                        wishlistMats.set(ingredient.itemId, {
+                            name: ingredient.itemName,
+                            count,
+                            usages: [usage],
+                        });
+                    }
                 }
             }
         }
-    }
 
-    return materials;
-}
-
-// Get quest requirements that are not yet delivered
-async function getQuestRequirements() {
-    const quests = await prisma.quest.findMany({
-        where: { isCompleted: false },
-        include: {
-            requirements: true,
-        },
-    });
-
-    const materials = new Map<string, { name: string; count: number }>();
-
-    for (const quest of quests) {
-        for (const req of quest.requirements) {
-            const remaining = req.requiredCount - req.deliveredCount;
-            if (remaining > 0) {
-                const existing = materials.get(req.itemId);
-                if (existing) {
-                    existing.count += remaining;
-                } else {
-                    // Try to get item name from database
-                    const item = await prisma.item.findUnique({ where: { id: req.itemId } });
-                    materials.set(req.itemId, {
-                        name: item?.nameJp || item?.nameEn || req.itemId,
-                        count: remaining,
-                    });
-                }
+        // Process quest materials
+        const questMaterialsMap = questMaterialsData.materials || {};
+        for (const [itemId, usages] of Object.entries(questMaterialsMap)) {
+            const totalCount = usages.reduce((sum, u) => sum + u.count, 0);
+            if (totalCount > 0) {
+                questMats.set(itemId, {
+                    name: usages[0]?.name || itemId,
+                    count: totalCount,
+                    usages: usages.map(u => ({
+                        sourceName: u.questName,
+                        sourceType: 'quest' as const,
+                        sourceId: u.questId,
+                        count: u.count,
+                    })),
+                });
             }
         }
-    }
 
-    return materials;
-}
+        // Merge all materials
+        const total = new Map<string, MaterialData>();
 
-// Merge all materials
-function mergeMaterials(...maps: Map<string, { name: string; count: number }>[]) {
-    const result = new Map<string, { name: string; count: number }>();
+        for (const [id, data] of wishlistMats) {
+            total.set(id, {
+                id,
+                name: data.name,
+                wishlistCount: data.count,
+                questCount: 0,
+                usages: data.usages,
+            });
+        }
 
-    for (const map of maps) {
-        for (const [id, data] of map) {
-            const existing = result.get(id);
+        for (const [id, data] of questMats) {
+            const existing = total.get(id);
             if (existing) {
-                existing.count += data.count;
+                existing.questCount = data.count;
+                existing.usages.push(...data.usages);
             } else {
-                result.set(id, { ...data });
+                total.set(id, {
+                    id,
+                    name: data.name,
+                    wishlistCount: 0,
+                    questCount: data.count,
+                    usages: data.usages,
+                });
             }
         }
+
+        return { wishlistMaterials: wishlistMats, totalMaterials: total };
+    }, [wishlistItems, recipes, questMaterialsData]);
+
+    const materialsArray = Array.from(totalMaterials.values())
+        .sort((a, b) => (b.wishlistCount + b.questCount) - (a.wishlistCount + a.questCount));
+
+    const toggleRow = (id: string) => {
+        setExpandedRows(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center py-12">
+                <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+            </div>
+        );
     }
-
-    return result;
-}
-
-export default async function DashboardPage() {
-    const [wishlistMaterials, questMaterials] = await Promise.all([
-        calculateWishlistMaterials(),
-        getQuestRequirements(),
-    ]);
-
-    const totalMaterials = mergeMaterials(wishlistMaterials, questMaterials);
-
-    // Convert to sorted array
-    const materialsArray = Array.from(totalMaterials.entries())
-        .map(([id, data]) => ({ id, ...data }))
-        .sort((a, b) => b.count - a.count);
-
-    const wishlistArray = Array.from(wishlistMaterials.entries())
-        .map(([id, data]) => ({ id, ...data }))
-        .sort((a, b) => b.count - a.count);
-
-    const questArray = Array.from(questMaterials.entries())
-        .map(([id, data]) => ({ id, ...data }))
-        .sort((a, b) => b.count - a.count);
 
     return (
         <div className="space-y-6">
+            {/* Popup Modal */}
+            {popup && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setPopup(null)}>
+                    <div
+                        className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+                            <div className="flex items-center gap-2">
+                                {popup.type === 'wishlist' ? (
+                                    <ClipboardList className="h-5 w-5 text-green-600" />
+                                ) : (
+                                    <Target className="h-5 w-5 text-blue-600" />
+                                )}
+                                <h3 className="font-semibold text-gray-900">{popup.name}</h3>
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={() => setPopup(null)}>
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
+                        <div className="p-4 overflow-y-auto max-h-[60vh]">
+                            <p className="text-sm text-gray-500 mb-3">必要素材一覧</p>
+                            {popup.ingredients.length > 0 ? (
+                                <div className="space-y-2">
+                                    {popup.ingredients.map((ing, idx) => (
+                                        <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-100">
+                                            <span className="text-gray-700">{ing.itemName}</span>
+                                            <span className="font-medium text-orange-600">x{ing.count}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-gray-500 text-center py-4">素材情報がありません</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <div>
                 <h1 className="text-2xl font-bold text-gray-900">ダッシュボード</h1>
@@ -147,7 +337,7 @@ export default async function DashboardPage() {
                             <div>
                                 <p className="text-sm text-blue-700">クエスト納品</p>
                                 <p className="text-2xl font-bold text-blue-900">
-                                    {questMaterials.size} 種類
+                                    {Array.from(totalMaterials.values()).filter(m => m.questCount > 0).length} 種類
                                 </p>
                             </div>
                         </div>
@@ -178,6 +368,9 @@ export default async function DashboardPage() {
                         <AlertTriangle className="h-5 w-5 text-orange-500" />
                         残すべき素材一覧
                     </CardTitle>
+                    <p className="text-sm text-gray-500">
+                        行をクリックで展開、アイテム/クエスト名をクリックで詳細表示
+                    </p>
                 </CardHeader>
                 <CardContent>
                     {materialsArray.length > 0 ? (
@@ -185,6 +378,7 @@ export default async function DashboardPage() {
                             <table className="w-full">
                                 <thead>
                                     <tr className="border-b-2 border-gray-200">
+                                        <th className="text-left py-3 px-4 font-medium text-gray-700 w-8"></th>
                                         <th className="text-left py-3 px-4 font-medium text-gray-700">素材名</th>
                                         <th className="text-right py-3 px-4 font-medium text-gray-700">ウィッシュリスト</th>
                                         <th className="text-right py-3 px-4 font-medium text-gray-700">クエスト</th>
@@ -193,21 +387,70 @@ export default async function DashboardPage() {
                                 </thead>
                                 <tbody>
                                     {materialsArray.map((mat) => {
-                                        const wishCount = wishlistMaterials.get(mat.id)?.count || 0;
-                                        const questCount = questMaterials.get(mat.id)?.count || 0;
+                                        const isExpanded = expandedRows.has(mat.id);
                                         return (
-                                            <tr key={mat.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                                <td className="py-3 px-4 font-medium text-gray-900">{mat.name}</td>
-                                                <td className="py-3 px-4 text-right text-green-700">
-                                                    {wishCount > 0 ? wishCount : '-'}
-                                                </td>
-                                                <td className="py-3 px-4 text-right text-blue-700">
-                                                    {questCount > 0 ? questCount : '-'}
-                                                </td>
-                                                <td className="py-3 px-4 text-right font-bold text-orange-700">
-                                                    {mat.count}
-                                                </td>
-                                            </tr>
+                                            <React.Fragment key={mat.id}>
+                                                <tr
+                                                    className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                                                    onClick={() => toggleRow(mat.id)}
+                                                >
+                                                    <td className="py-3 px-4">
+                                                        {isExpanded ? (
+                                                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                                                        ) : (
+                                                            <ChevronRight className="h-4 w-4 text-gray-400" />
+                                                        )}
+                                                    </td>
+                                                    <td className="py-3 px-4 font-medium text-gray-900">{mat.name}</td>
+                                                    <td className="py-3 px-4 text-right text-green-700">
+                                                        {mat.wishlistCount > 0 ? mat.wishlistCount : '-'}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right text-blue-700">
+                                                        {mat.questCount > 0 ? mat.questCount : '-'}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right font-bold text-orange-700">
+                                                        {mat.wishlistCount + mat.questCount}
+                                                    </td>
+                                                </tr>
+                                                {isExpanded && mat.usages.length > 0 && (
+                                                    <tr>
+                                                        <td colSpan={5} className="bg-gray-50 px-8 py-3">
+                                                            <div className="space-y-1">
+                                                                {mat.usages.map((usage, idx) => (
+                                                                    <div
+                                                                        key={idx}
+                                                                        className="flex justify-between text-sm"
+                                                                    >
+                                                                        <button
+                                                                            className="flex items-center gap-2 hover:underline text-left"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                if (usage.sourceType === 'wishlist') {
+                                                                                    showWishlistPopup(usage.sourceId, usage.sourceName);
+                                                                                } else {
+                                                                                    showQuestPopup(usage.sourceId, usage.sourceName);
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            {usage.sourceType === 'wishlist' ? (
+                                                                                <ClipboardList className="h-3 w-3 text-green-600" />
+                                                                            ) : (
+                                                                                <Target className="h-3 w-3 text-blue-600" />
+                                                                            )}
+                                                                            <span className={`${usage.sourceType === 'wishlist' ? 'text-green-700' : 'text-blue-700'} hover:text-opacity-80`}>
+                                                                                {usage.sourceName}
+                                                                            </span>
+                                                                        </button>
+                                                                        <span className="font-medium text-gray-700">
+                                                                            x{usage.count}
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </React.Fragment>
                                         );
                                     })}
                                 </tbody>
@@ -224,61 +467,6 @@ export default async function DashboardPage() {
                     )}
                 </CardContent>
             </Card>
-
-            {/* Individual Lists */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Wishlist Materials */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-lg flex items-center gap-2">
-                            <ClipboardList className="h-5 w-5 text-green-600" />
-                            ウィッシュリスト用素材
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {wishlistArray.length > 0 ? (
-                            <div className="space-y-2">
-                                {wishlistArray.map((mat) => (
-                                    <div key={mat.id} className="flex justify-between py-2 border-b border-gray-100">
-                                        <span className="text-gray-700">{mat.name}</span>
-                                        <span className="font-medium text-green-700">x{mat.count}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-center text-gray-500 py-4">
-                                ウィッシュリストが空です
-                            </p>
-                        )}
-                    </CardContent>
-                </Card>
-
-                {/* Quest Materials */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-lg flex items-center gap-2">
-                            <Target className="h-5 w-5 text-blue-600" />
-                            クエスト納品用素材
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {questArray.length > 0 ? (
-                            <div className="space-y-2">
-                                {questArray.map((mat) => (
-                                    <div key={mat.id} className="flex justify-between py-2 border-b border-gray-100">
-                                        <span className="text-gray-700">{mat.name}</span>
-                                        <span className="font-medium text-blue-700">x{mat.count}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-center text-gray-500 py-4">
-                                クエスト納品アイテムがありません
-                            </p>
-                        )}
-                    </CardContent>
-                </Card>
-            </div>
         </div>
     );
 }
