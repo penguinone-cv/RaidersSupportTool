@@ -54,6 +54,18 @@ function getWishlistItems(): WishlistItem[] {
     }
 }
 
+const QUEST_PROGRESS_COOKIE = 'quest_progress';
+
+function getCompletedQuestIds(): string[] {
+    const cookie = getCookie(QUEST_PROGRESS_COOKIE);
+    if (!cookie) return [];
+    try {
+        return JSON.parse(cookie);
+    } catch {
+        return [];
+    }
+}
+
 export default function DashboardPage() {
     const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
     const [recipes, setRecipes] = useState<Record<string, { ingredients: { itemId: string; itemName: string; count: number }[] }>>({});
@@ -87,9 +99,13 @@ export default function DashboardPage() {
             }
             setRecipes(recipeMap);
 
-            // Fetch quest materials with details
+            // Get completed quest IDs from cookie
+            const completedIds = getCompletedQuestIds();
+            const completedParam = completedIds.length > 0 ? `?completedIds=${completedIds.join(',')}` : '';
+
+            // Fetch quest materials with details (excluding completed quests)
             try {
-                const res = await fetch(`${BASE_PATH}/api/dashboard/quest-materials`);
+                const res = await fetch(`${BASE_PATH}/api/dashboard/quest-materials${completedParam}`);
                 if (res.ok) {
                     const data = await res.json();
                     setQuestMaterialsData(data);

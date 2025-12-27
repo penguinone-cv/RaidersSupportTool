@@ -1,21 +1,28 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
-        // Get incomplete quests with requirements
+        // Get completed quest IDs from query parameter (comma-separated)
+        const searchParams = request.nextUrl.searchParams;
+        const completedIdsParam = searchParams.get('completedIds');
+        const completedIds = completedIdsParam ? completedIdsParam.split(',').filter(Boolean) : [];
+
+        // Get quests (either not marked as completed in DB or not in completed cookie list)
         const quests = await prisma.quest.findMany({
-            where: { isCompleted: false },
             include: {
                 requirements: true,
             },
         });
 
+        // Filter out completed quests (both from DB and from cookie)
+        const activeQuests = quests.filter(q => !q.isCompleted && !completedIds.includes(q.id));
+
         // Group by material with quest name details
         const materials: Record<string, { name: string; count: number; questName: string; questId: string }[]> = {};
         const questDetails: Record<string, { requirements: { itemName: string; count: number }[] }> = {};
 
-        for (const quest of quests) {
+        for (const quest of activeQuests) {
             const questName = quest.nameJp || quest.nameEn;
             const questRequirements: { itemName: string; count: number }[] = [];
 
